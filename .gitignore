@@ -25,3 +25,4 @@ NetUsageApp.spec
 dist/
 build/
 .iss/
+start_minimized.bat
