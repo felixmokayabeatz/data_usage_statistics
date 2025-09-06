@@ -19,13 +19,19 @@ from kivy.uix.popup import Popup
 from kivy.uix.button import Button
 from kivy.uix.togglebutton import ToggleButton
 from kivy.uix.slider import Slider
-from kivy.graphics import Color, Rectangle, RoundedRectangle
+from kivy.uix.progressbar import ProgressBar
+from kivy.graphics import Color, Rectangle, RoundedRectangle, Line, Ellipse
 from kivy.utils import platform
 from kivy.config import Config
 from kivy.core.clipboard import Clipboard
 from kivy.properties import BooleanProperty, NumericProperty, StringProperty
 from kivy.metrics import dp
 from kivy.lang import Builder
+from kivy.animation import Animation
+from kivy.uix.widget import Widget
+
+# Configure Kivy for better rendering
+Config.set('graphics', 'multisamples', '0')
 
 # Try to import system tray functionality
 try:
@@ -40,7 +46,6 @@ except ImportError:
     HAS_SYSTRAY = False
 
 APP_NAME = "NetUsageApp"
-APP_VERSION = "2.0"
 
 # --- Persistent folder in AppData ---
 if getattr(sys, 'frozen', False):
@@ -103,91 +108,400 @@ def init_counters():
 # Initialize counters on startup
 init_counters()
 
-# Custom UI Components
-class DashboardLabel(Label):
-    pass
+# Kivy KV string for better styling
+KV_STRING = '''
+<ModernButton>:
+    canvas.before:
+        Color:
+            rgba: 0.2, 0.6, 1.0, 1 if self.state == 'normal' else (0.15, 0.45, 0.8, 1)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [15]
+    color: 1, 1, 1, 1
+    font_size: 16
+    bold: True
 
-class DashboardCard(BoxLayout):
-    title = StringProperty("")
-    value = StringProperty("")
-    icon = StringProperty("")
+<IconButton>:
+    canvas.before:
+        Color:
+            rgba: 0.15, 0.15, 0.2, 0.9
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [self.height/2]
+    color: 0.9, 0.9, 1, 1
+    font_size: 20
+    bold: True
 
-class DashboardButton(Button):
-    pass
+<GlassCard>:
+    canvas.before:
+        Color:
+            rgba: 0.12, 0.12, 0.15, 0.85
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [20]
+        Color:
+            rgba: 0.3, 0.3, 0.4, 0.3
+        Line:
+            rounded_rectangle: self.x, self.y, self.width, self.height, 20
+            width: 1
 
-class ModernLabel(Label):
-    """Custom label with modern styling"""
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.color = (0.9, 0.9, 0.9, 1)
-        self.font_size = dp(16)
-        self.size_hint_y = None
-        self.height = dp(40)
-        self.valign = 'middle'
-        self.halign = 'left'
-        self.text_size = (self.width, None)
+<ModernLabel>:
+    color: 0.9, 0.9, 0.9, 1
+    font_size: 16
+    text_size: self.width, None
+    halign: 'left'
+    valign: 'middle'
+'''
+
+Builder.load_string(KV_STRING)
 
 class ModernButton(Button):
-    """Custom button with modern styling"""
+    """Modern styled button"""
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.background_normal = ''
-        self.background_color = (0.2, 0.6, 0.9, 1)
-        self.color = (1, 1, 1, 1)
+        self.background_down = ''
         self.size_hint_y = None
-        self.height = dp(40)
-        self.font_size = dp(16)
-        self.border_radius = [dp(10)]
+        self.height = dp(50)
+
+class IconButton(Button):
+    """Icon-style button"""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.background_normal = ''
+        self.background_down = ''
+        self.size_hint = (None, None)
+        self.size = (dp(60), dp(60))
+
+class GlassCard(BoxLayout):
+    """Modern glass-morphism card widget"""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.padding = dp(20)
+        self.spacing = dp(10)
+
+class ModernLabel(Label):
+    """Modern styled label"""
+    pass
+
+class SimpleChart(Widget):
+    """Simple data visualization widget"""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.size_hint_y = None
+        self.height = dp(80)
+        self.data_points = []
+        self.max_points = 30
+        
+    def add_data_point(self, value):
+        """Add new data point and redraw"""
+        self.data_points.append(float(value))
+        if len(self.data_points) > self.max_points:
+            self.data_points.pop(0)
+        self.redraw()
+        
+    def redraw(self):
+        """Redraw the chart"""
+        self.canvas.clear()
+        if len(self.data_points) < 2:
+            return
+            
+        with self.canvas:
+            # Chart background
+            Color(0.08, 0.08, 0.12, 0.8)
+            Rectangle(pos=self.pos, size=self.size)
+            
+            # Chart line
+            Color(0.2, 0.8, 0.6, 1)
+            max_val = max(self.data_points) if max(self.data_points) > 0 else 1
+            
+            points = []
+            for i, val in enumerate(self.data_points):
+                x = self.x + (i / (len(self.data_points) - 1)) * self.width
+                y = self.y + (val / max_val) * self.height * 0.8 + self.height * 0.1
+                points.extend([x, y])
+            
+            if len(points) >= 4:
+                Line(points=points, width=2)
+
+class AdapterCard(GlassCard):
+    """Enhanced adapter card"""
+    def __init__(self, adapter_name, **kwargs):
+        super().__init__(**kwargs)
+        self.adapter_name = adapter_name
+        self.size_hint_y = None
+        self.height = dp(200)
+        self.orientation = 'vertical'
+        
+        # Header
+        header = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(10))
+        
+        # Network icon
+        icon_text = "📶" if any(x in adapter_name.lower() for x in ["wi-fi", "wireless", "wifi"]) else "🔌"
+        icon_label = Label(
+            text=icon_text,
+            font_size=dp(24),
+            size_hint_x=None,
+            width=dp(40),
+            color=(0.2, 0.8, 1, 1)
+        )
+        header.add_widget(icon_label)
+        
+        # Adapter name
+        name_label = Label(
+            text=adapter_name[:25] + "..." if len(adapter_name) > 25 else adapter_name,
+            font_size=dp(16),
+            bold=True,
+            color=(0.9, 0.9, 1, 1),
+            text_size=(None, None),
+            halign='left'
+        )
+        header.add_widget(name_label)
+        
+        self.add_widget(header)
+        
+        # Stats row
+        stats_row = BoxLayout(size_hint_y=None, height=dp(60), spacing=dp(20))
+        
+        # Upload stats
+        upload_box = BoxLayout(orientation='vertical', spacing=dp(5))
+        upload_box.add_widget(Label(
+            text="⬆ Upload",
+            font_size=dp(12),
+            color=(0.7, 0.7, 0.8, 1),
+            size_hint_y=None,
+            height=dp(20)
+        ))
+        self.upload_label = Label(
+            text="0 MB",
+            font_size=dp(14),
+            bold=True,
+            color=(1, 0.4, 0.4, 1),
+            size_hint_y=None,
+            height=dp(25)
+        )
+        upload_box.add_widget(self.upload_label)
+        stats_row.add_widget(upload_box)
+        
+        # Download stats
+        download_box = BoxLayout(orientation='vertical', spacing=dp(5))
+        download_box.add_widget(Label(
+            text="⬇ Download",
+            font_size=dp(12),
+            color=(0.7, 0.7, 0.8, 1),
+            size_hint_y=None,
+            height=dp(20)
+        ))
+        self.download_label = Label(
+            text="0 MB",
+            font_size=dp(14),
+            bold=True,
+            color=(0.4, 1, 0.4, 1),
+            size_hint_y=None,
+            height=dp(25)
+        )
+        download_box.add_widget(self.download_label)
+        stats_row.add_widget(download_box)
+        
+        self.add_widget(stats_row)
+        
+        # Total usage
+        total_box = BoxLayout(orientation='vertical', spacing=dp(5))
+        total_box.add_widget(Label(
+            text="📊 Total Usage",
+            font_size=dp(12),
+            color=(0.7, 0.7, 0.8, 1),
+            size_hint_y=None,
+            height=dp(20)
+        ))
+        
+        self.total_label = Label(
+            text="0.00 GB",
+            font_size=dp(18),
+            bold=True,
+            color=(0.2, 0.9, 0.6, 1),
+            size_hint_y=None,
+            height=dp(30)
+        )
+        total_box.add_widget(self.total_label)
+        
+        # Progress bar
+        self.progress = ProgressBar(
+            max=1000,
+            size_hint_y=None,
+            height=dp(8)
+        )
+        # Style the progress bar
+        with self.progress.canvas.before:
+            Color(0.2, 0.2, 0.3, 1)
+            self.progress_bg = Rectangle(pos=self.progress.pos, size=self.progress.size)
+        self.progress.bind(pos=self.update_progress_bg, size=self.update_progress_bg)
+        
+        total_box.add_widget(self.progress)
+        self.add_widget(total_box)
+        
+        # Simple chart
+        self.chart = SimpleChart()
+        self.add_widget(self.chart)
+    
+    def update_progress_bg(self, *args):
+        self.progress_bg.pos = self.progress.pos
+        self.progress_bg.size = self.progress.size
+    
+    def update_stats(self, sent_mb, recv_mb, total_gb):
+        """Update card statistics"""
+        self.upload_label.text = f"{sent_mb:.1f} MB"
+        self.download_label.text = f"{recv_mb:.1f} MB"
+        self.total_label.text = f"{total_gb:.2f} GB"
+        
+        # Update progress (scale for visual effect)
+        self.progress.value = min(total_gb * 50, 1000)
+        
+        # Add data point to chart
+        self.chart.add_data_point(total_gb)
 
 class SettingsPopup(Popup):
-    """Settings popup window"""
+    """Enhanced settings popup"""
     def __init__(self, main_app, **kwargs):
         super().__init__(**kwargs)
         self.main_app = main_app
-        self.title = "Settings"
+        self.title = "Settings & Configuration"
         self.title_size = dp(20)
         self.title_color = (1, 1, 1, 1)
-        self.size_hint = (0.8, 0.6)
+        self.size_hint = (0.8, 0.7)
         self.separator_color = (0.2, 0.6, 0.9, 1)
         self.separator_height = dp(2)
-        self.background = 'transparent'
         
-        with self.canvas.before:
-            Color(0.15, 0.15, 0.18, 1)
-            RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(15)])
+        # Main layout
+        main_layout = BoxLayout(orientation='vertical', padding=dp(20), spacing=dp(20))
         
-        layout = BoxLayout(orientation='vertical', padding=dp(20), spacing=dp(15))
-        layout.bind(size=self._update_bg, pos=self._update_bg)
+        # Refresh interval section
+        refresh_card = GlassCard(orientation='vertical', size_hint_y=None, height=dp(120))
+        refresh_card.add_widget(Label(
+            text="🔄 Refresh Interval",
+            font_size=dp(18),
+            bold=True,
+            color=(0.2, 0.8, 1, 1),
+            size_hint_y=None,
+            height=dp(30)
+        ))
         
-        # Refresh interval slider
-        layout.add_widget(DashboardLabel(text="Refresh Interval (seconds):", font_size=dp(18)))
-        self.interval_slider = Slider(min=1, max=60, value=main_app.refresh_interval)
-        layout.add_widget(self.interval_slider)
-        self.interval_label = DashboardLabel(text=f"Current: {self.interval_slider.value} seconds", font_size=dp(16))
-        layout.add_widget(self.interval_label)
+        self.interval_slider = Slider(
+            min=1, 
+            max=60, 
+            value=main_app.refresh_interval,
+            size_hint_y=None,
+            height=dp(40)
+        )
+        refresh_card.add_widget(self.interval_slider)
+        
+        self.interval_label = Label(
+            text=f"Update every {self.interval_slider.value:.0f} seconds",
+            font_size=dp(14),
+            color=(0.8, 0.8, 0.9, 1),
+            size_hint_y=None,
+            height=dp(25)
+        )
+        refresh_card.add_widget(self.interval_label)
         self.interval_slider.bind(value=self.on_slider_change)
         
-        # Startup toggle
-        self.startup_toggle = ToggleButton(text="Start with Windows", state='normal', 
-                                          size_hint_y=None, height=dp(40))
-        self.startup_toggle.bind(state=self.on_startup_toggle)
-        layout.add_widget(self.startup_toggle)
+        main_layout.add_widget(refresh_card)
         
-        # Check current startup status
+        # Startup section
+        startup_card = GlassCard(orientation='vertical', size_hint_y=None, height=dp(100))
+        startup_card.add_widget(Label(
+            text="🚀 Windows Startup",
+            font_size=dp(18),
+            bold=True,
+            color=(0.2, 0.8, 1, 1),
+            size_hint_y=None,
+            height=dp(40)
+        ))
+        
+        self.startup_toggle = ToggleButton(
+            text="Start with Windows",
+            state='normal',
+            size_hint_y=None,
+            height=dp(40),
+            background_normal='',
+            background_down=''
+        )
+        
+        # Custom styling for toggle
+        with self.startup_toggle.canvas.before:
+            Color(0.3, 0.3, 0.4, 1)
+            self.startup_bg = RoundedRectangle(
+                pos=self.startup_toggle.pos,
+                size=self.startup_toggle.size,
+                radius=[dp(10)]
+            )
+        
+        self.startup_toggle.bind(
+            pos=self.update_startup_bg,
+            size=self.update_startup_bg,
+            state=self.on_startup_toggle
+        )
+        
+        startup_card.add_widget(self.startup_toggle)
+        main_layout.add_widget(startup_card)
+        
+        # Database info
+        db_card = GlassCard(orientation='vertical', size_hint_y=None, height=dp(80))
+        db_card.add_widget(Label(
+            text="💾 Data Storage",
+            font_size=dp(16),
+            bold=True,
+            color=(0.2, 0.8, 1, 1),
+            size_hint_y=None,
+            height=dp(30)
+        ))
+        
+        db_info = Label(
+            text=f"Database: {os.path.basename(DB_FILE)}",
+            font_size=dp(12),
+            color=(0.7, 0.7, 0.8, 1),
+            size_hint_y=None,
+            height=dp(30)
+        )
+        db_card.add_widget(db_info)
+        main_layout.add_widget(db_card)
+        
+        # Check startup status
         self.check_startup_status()
         
-        # Close button
-        close_btn = ModernButton(text="Close")
-        close_btn.bind(on_release=self.dismiss)
-        layout.add_widget(close_btn)
+        # Action buttons
+        button_layout = BoxLayout(size_hint_y=None, height=dp(60), spacing=dp(15))
         
-        self.content = layout
+        reset_btn = ModernButton(text="🔄 Reset Data")
+        reset_btn.bind(on_release=self.reset_data)
+        button_layout.add_widget(reset_btn)
+        
+        close_btn = ModernButton(text="✓ Save & Close")
+        close_btn.bind(on_release=self.dismiss)
+        button_layout.add_widget(close_btn)
+        
+        main_layout.add_widget(button_layout)
+        self.content = main_layout
     
-    def _update_bg(self, instance, value):
-        self.canvas.before.clear()
-        with self.canvas.before:
-            Color(0.15, 0.15, 0.18, 1)
-            RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(15)])
+    def update_startup_bg(self, *args):
+        self.startup_bg.pos = self.startup_toggle.pos
+        self.startup_bg.size = self.startup_toggle.size
+        
+        # Change color based on state
+        if self.startup_toggle.state == 'down':
+            self.startup_toggle.canvas.before.children[0].rgba = (0.2, 0.7, 0.3, 1)
+        else:
+            self.startup_toggle.canvas.before.children[0].rgba = (0.3, 0.3, 0.4, 1)
+    
+    def reset_data(self, *args):
+        """Reset all usage data"""
+        cur.execute("DELETE FROM usage")
+        conn.commit()
+        init_counters()
+        self.dismiss()
     
     def check_startup_status(self):
         """Check if app is set to start with Windows"""
@@ -204,31 +518,32 @@ class SettingsPopup(Popup):
                 winreg.CloseKey(registry_key)
             except Exception:
                 self.startup_toggle.state = 'normal'
+        
+        self.update_startup_bg()
     
     def on_slider_change(self, instance, value):
-        self.interval_label.text = f"Current: {int(value)} seconds"
+        self.interval_label.text = f"Update every {int(value)} seconds"
         self.main_app.refresh_interval = int(value)
     
     def on_startup_toggle(self, instance, value):
         if platform == 'win':
-            if value == 'down':  # Add to startup
+            if value == 'down':
                 self.add_to_startup()
-            else:  # Remove from startup
+            else:
                 self.remove_from_startup()
+        self.update_startup_bg()
     
     def add_to_startup(self):
-        """Register the app in Windows startup (minimized to tray)"""
+        """Add to Windows startup"""
         if getattr(sys, 'frozen', False):
             exe_path = sys.executable
         else:
             exe_path = os.path.realpath(__file__).replace(".py", ".exe")
             if not os.path.exists(exe_path):
-                # Fallback to Python script
                 exe_path = sys.executable
                 script_path = os.path.realpath(__file__)
                 args = f'"{exe_path}" "{script_path}" --minimized'
                 
-                # Create a batch file to run the Python script
                 batch_content = f'@echo off\nstart "" /min {args}'
                 batch_path = os.path.join(BASE_DIR, "start_minimized.bat")
                 
@@ -247,7 +562,7 @@ class SettingsPopup(Popup):
             print(f"Error adding to startup: {e}")
     
     def remove_from_startup(self):
-        """Remove the app from Windows startup"""
+        """Remove from Windows startup"""
         if platform == 'win':
             try:
                 key = winreg.HKEY_CURRENT_USER
@@ -256,7 +571,7 @@ class SettingsPopup(Popup):
                 try:
                     winreg.DeleteValue(registry_key, APP_NAME)
                 except FileNotFoundError:
-                    pass  # Already not in startup
+                    pass
                 winreg.CloseKey(registry_key)
             except Exception as e:
                 print(f"Error removing from startup: {e}")
@@ -267,207 +582,245 @@ class NetUsage(BoxLayout):
         self.orientation = 'vertical'
         self.padding = dp(20)
         self.spacing = dp(15)
-        self.refresh_interval = 5  # seconds
+        self.refresh_interval = 5
+        self.adapter_cards = {}
 
         # Set window properties
-        Window.size = (500, 700)
-        Window.minimum_width = 450
-        Window.minimum_height = 600
+        Window.size = (650, 800)
+        Window.minimum_width = 600
+        Window.minimum_height = 700
+        Window.clearcolor = (0.05, 0.05, 0.08, 1)
         
-        # Dark modern background
-        with self.canvas.before:
-            Color(0.1, 0.1, 0.12, 1)
-            self.bg_rect = Rectangle(pos=self.pos, size=self.size)
-        
-        self.bind(pos=self._update_bg, size=self._update_bg)
+        self._create_header()
+        self._create_overview()
+        self._create_adapters_section()
 
-        # Header with title
-        header = BoxLayout(size_hint_y=None, height=dp(80), spacing=dp(10))
-        with header.canvas.before:
-            Color(0.15, 0.15, 0.18, 1)
-            header.bg_rect = RoundedRectangle(pos=header.pos, size=header.size, radius=[dp(15)])
-        header.bind(pos=self._update_header_bg, size=self._update_header_bg)
+    def _create_header(self):
+        """Create header section"""
+        header_card = GlassCard(orientation='horizontal', size_hint_y=None, height=dp(80))
         
-        self.title_label = DashboardLabel(
-            text="🌐 Network Data Dashboard",
+        # Title section
+        title_layout = BoxLayout(orientation='vertical', spacing=dp(5))
+        
+        main_title = Label(
+            text="🌐 Network Monitor",
             font_size=dp(24),
             bold=True,
-            color=(0.2, 0.9, 0.6, 1),
+            color=(1, 1, 1, 1),
+            size_hint_y=None,
+            height=dp(35)
         )
-        header.add_widget(self.title_label)
+        title_layout.add_widget(main_title)
         
-        # Settings button
-        settings_btn = DashboardButton(text="⚙️", size_hint_x=None, width=dp(50),
-                                     background_color=(0.2, 0.6, 0.9, 1))
+        subtitle = Label(
+            text="Real-time data usage tracking",
+            font_size=dp(12),
+            color=(0.7, 0.7, 0.8, 1),
+            size_hint_y=None,
+            height=dp(20)
+        )
+        title_layout.add_widget(subtitle)
+        
+        header_card.add_widget(title_layout)
+        
+        # Control buttons
+        controls = BoxLayout(size_hint_x=None, width=dp(200), spacing=dp(10))
+        
+        settings_btn = IconButton(text="⚙")
         settings_btn.bind(on_release=self.show_settings)
-        header.add_widget(settings_btn)
+        controls.add_widget(settings_btn)
         
-        # Minimize to tray button
+        refresh_btn = IconButton(text="🔄")
+        refresh_btn.bind(on_release=self.force_refresh)
+        controls.add_widget(refresh_btn)
+        
         if HAS_SYSTRAY:
-            tray_btn = DashboardButton(text="➖", size_hint_x=None, width=dp(50),
-                                     background_color=(0.3, 0.3, 0.4, 1))
+            tray_btn = IconButton(text="➖")
             tray_btn.bind(on_release=self.minimize_to_tray)
-            header.add_widget(tray_btn)
+            controls.add_widget(tray_btn)
         
-        self.add_widget(header)
+        header_card.add_widget(controls)
+        self.add_widget(header_card)
 
-        # Total usage card
-        total_card = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(120),
-                             padding=dp(15), spacing=dp(10))
-        with total_card.canvas.before:
-            Color(0.15, 0.15, 0.18, 1)
-            total_card.bg_rect = RoundedRectangle(pos=total_card.pos, size=total_card.size, radius=[dp(15)])
-        total_card.bind(pos=self._update_card_bg, size=self._update_card_bg)
+    def _create_overview(self):
+        """Create overview section"""
+        overview_card = GlassCard(orientation='horizontal', size_hint_y=None, height=dp(100))
         
-        total_card.add_widget(DashboardLabel(
-            text="TOTAL DATA USAGE",
-            font_size=dp(16),
-            color=(0.7, 0.7, 0.8, 1)
-        ))
-        
-        self.total_label = DashboardLabel(
-            text="0.00 GB",
-            font_size=dp(32),
-            bold=True,
-            color=(0.2, 0.9, 0.6, 1),
-        )
-        total_card.add_widget(self.total_label)
-        
-        self.add_widget(total_card)
-
-        # Adapters section title
-        self.add_widget(DashboardLabel(
-            text="NETWORK ADAPTERS",
-            font_size=dp(18),
+        # Total usage
+        total_section = BoxLayout(orientation='vertical', spacing=dp(5))
+        total_section.add_widget(Label(
+            text="📊 TOTAL USAGE",
+            font_size=dp(14),
             bold=True,
             color=(0.7, 0.7, 0.8, 1),
             size_hint_y=None,
-            height=dp(40)
+            height=dp(25)
         ))
+        
+        self.total_label = Label(
+            text="0.00 GB",
+            font_size=dp(28),
+            bold=True,
+            color=(0.2, 0.9, 0.6, 1),
+            size_hint_y=None,
+            height=dp(40)
+        )
+        total_section.add_widget(self.total_label)
+        
+        overview_card.add_widget(total_section)
+        
+        # Stats section
+        stats_section = BoxLayout(orientation='vertical', spacing=dp(5))
+        
+        stats_section.add_widget(Label(
+            text="📈 STATISTICS",
+            font_size=dp(14),
+            bold=True,
+            color=(0.7, 0.7, 0.8, 1),
+            size_hint_y=None,
+            height=dp(25)
+        ))
+        
+        self.adapters_count = Label(
+            text="🔌 0 adapters",
+            font_size=dp(14),
+            color=(0.8, 0.8, 0.9, 1),
+            size_hint_y=None,
+            height=dp(20)
+        )
+        stats_section.add_widget(self.adapters_count)
+        
+        self.status_label = Label(
+            text="🟢 Active monitoring",
+            font_size=dp(12),
+            color=(0.2, 0.8, 1, 1),
+            size_hint_y=None,
+            height=dp(20)
+        )
+        stats_section.add_widget(self.status_label)
+        
+        overview_card.add_widget(stats_section)
+        self.add_widget(overview_card)
 
-        # Scrollable layout for adapters
-        self.scroll = ScrollView(size_hint=(1, 1))
-        self.grid = GridLayout(cols=1, spacing=dp(15), size_hint_y=None)
-        self.grid.bind(minimum_height=self.grid.setter('height'))
-        self.scroll.add_widget(self.grid)
+    def _create_adapters_section(self):
+        """Create adapters section"""
+        # Section header
+        header_layout = BoxLayout(size_hint_y=None, height=dp(40))
+        header_layout.add_widget(Label(
+            text="🌐 NETWORK ADAPTERS",
+            font_size=dp(18),
+            bold=True,
+            color=(0.9, 0.9, 1, 1),
+            halign='left'
+        ))
+        self.add_widget(header_layout)
+        
+        # Scrollable adapters
+        self.scroll = ScrollView()
+        self.adapters_layout = BoxLayout(
+            orientation='vertical',
+            spacing=dp(15),
+            size_hint_y=None
+        )
+        self.adapters_layout.bind(minimum_height=self.adapters_layout.setter('height'))
+        
+        self.scroll.add_widget(self.adapters_layout)
         self.add_widget(self.scroll)
+        
+        # Start updates
+        Clock.schedule_interval(self.update_data, self.refresh_interval)
 
-        self.labels = {}  # adapter -> widget
-        Clock.schedule_interval(self.update_labels, self.refresh_interval)
-
-    def _update_bg(self, instance, value):
-        self.bg_rect.pos = self.pos
-        self.bg_rect.size = self.size
-    
-    def _update_header_bg(self, instance, value):
-        instance.bg_rect.pos = instance.pos
-        instance.bg_rect.size = instance.size
-    
-    def _update_card_bg(self, instance, value):
-        instance.bg_rect.pos = instance.pos
-        instance.bg_rect.size = instance.size
-
-    def show_settings(self, instance):
+    def show_settings(self, *args):
         """Show settings popup"""
         popup = SettingsPopup(self)
         popup.open()
 
-    def minimize_to_tray(self, instance):
-        """Minimize the app to system tray"""
+    def minimize_to_tray(self, *args):
+        """Minimize to system tray"""
         if HAS_SYSTRAY and platform == 'win':
             Window.hide()
         else:
-            # Fallback for systems without system tray support
             App.get_running_app().stop()
 
-    def update_labels(self, *args):
-        counters = psutil.net_io_counters(pernic=True)
-        total_bytes = 0
-        physical_adapters = get_physical_adapters()
+    def force_refresh(self, *args):
+        """Force data refresh"""
+        self.update_data()
 
-        for adapter in physical_adapters:
-            if adapter not in counters:
-                continue
+    def update_data(self, *args):
+        """Update network data"""
+        try:
+            counters = psutil.net_io_counters(pernic=True)
+            total_bytes = 0
+            active_adapters = 0
+            physical_adapters = get_physical_adapters()
+
+            for adapter in physical_adapters:
+                if adapter not in counters:
+                    continue
+                    
+                active_adapters += 1
+                current_stats = counters[adapter]
                 
-            # Get current stats
-            current_stats = counters[adapter]
+                # Calculate usage from initial counters
+                if adapter in initial_counters:
+                    initial_stats = initial_counters[adapter]
+                    sent = max(0, current_stats.bytes_sent - initial_stats.bytes_sent)
+                    recv = max(0, current_stats.bytes_recv - initial_stats.bytes_recv)
+                else:
+                    sent, recv = current_stats.bytes_sent, current_stats.bytes_recv
+                    initial_counters[adapter] = current_stats
+
+                # Update database
+                cur.execute("SELECT total_sent, total_recv FROM usage WHERE adapter=?", (adapter,))
+                row = cur.fetchone()
+
+                if row:
+                    prev_sent, prev_recv = row
+                    total_sent = sent + prev_sent
+                    total_recv = recv + prev_recv
+                    cur.execute("UPDATE usage SET total_sent=?, total_recv=?, last_update=CURRENT_TIMESTAMP WHERE adapter=?",
+                                (total_sent, total_recv, adapter))
+                else:
+                    total_sent, total_recv = sent, recv
+                    cur.execute("INSERT INTO usage(adapter,total_sent,total_recv) VALUES(?,?,?)",
+                                (adapter, total_sent, total_recv))
+
+                total_bytes += total_sent + total_recv
+                
+                # Convert to display units
+                sent_mb = total_sent / (1024**2)
+                recv_mb = total_recv / (1024**2)
+                total_gb = (total_sent + total_recv) / (1024**3)
+
+                # Create or update adapter card
+                if adapter not in self.adapter_cards:
+                    card = AdapterCard(adapter)
+                    self.adapter_cards[adapter] = card
+                    self.adapters_layout.add_widget(card)
+                
+                # Update the card
+                self.adapter_cards[adapter].update_stats(sent_mb, recv_mb, total_gb)
+
+            # Update overview
+            total_gb_all = total_bytes / (1024**3)
+            self.total_label.text = f"{total_gb_all:.2f} GB"
+            self.adapters_count.text = f"🔌 {active_adapters} adapters"
+            self.status_label.text = "🟢 Active monitoring"
+
+            conn.commit()
             
-            # Get initial stats if available
-            if adapter in initial_counters:
-                initial_stats = initial_counters[adapter]
-                sent = max(0, current_stats.bytes_sent - initial_stats.bytes_sent)
-                recv = max(0, current_stats.bytes_recv - initial_stats.bytes_recv)
-            else:
-                sent, recv = current_stats.bytes_sent, current_stats.bytes_recv
-                initial_counters[adapter] = current_stats
-
-            # Update database
-            cur.execute("SELECT total_sent, total_recv FROM usage WHERE adapter=?", (adapter,))
-            row = cur.fetchone()
-
-            if row:
-                prev_sent, prev_recv = row
-                total_sent = sent + prev_sent
-                total_recv = recv + prev_recv
-                cur.execute("UPDATE usage SET total_sent=?, total_recv=?, last_update=CURRENT_TIMESTAMP WHERE adapter=?",
-                            (total_sent, total_recv, adapter))
-            else:
-                total_sent, total_recv = sent, recv
-                cur.execute("INSERT INTO usage(adapter,total_sent,total_recv) VALUES(?,?,?)",
-                            (adapter, total_sent, total_recv))
-
-            total_bytes += total_sent + total_recv
-            total_gb = (total_sent + total_recv) / (1024**3)
-
-            # Create or update adapter card
-            if adapter not in self.labels:
-                # Create a card for this adapter
-                card = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(100),
-                               padding=dp(15), spacing=dp(5))
-                with card.canvas.before:
-                    Color(0.15, 0.15, 0.18, 1)
-                    card.bg_rect = RoundedRectangle(pos=card.pos, size=card.size, radius=[dp(15)])
-                card.bind(pos=self._update_adapter_bg, size=self._update_adapter_bg)
-                
-                # Adapter name
-                name_label = DashboardLabel(
-                    text=adapter,
-                    font_size=dp(16),
-                    bold=True,
-                    color=(0.8, 0.8, 1, 1),
-                    size_hint_y=None,
-                    height=dp(30)
-                )
-                card.add_widget(name_label)
-                
-                # Usage info
-                usage_label = DashboardLabel(
-                    text=f"{total_gb:.2f} GB used",
-                    font_size=dp(20),
-                    color=(0.6, 0.9, 0.8, 1),
-                    size_hint_y=None,
-                    height=dp(40)
-                )
-                card.add_widget(usage_label)
-                
-                self.labels[adapter] = {
-                    'card': card,
-                    'usage_label': usage_label
-                }
-                self.grid.add_widget(card)
-            else:
-                # Update existing card
-                self.labels[adapter]['usage_label'].text = f"{total_gb:.2f} GB used"
-
-        # Update total
-        total_gb_all = total_bytes / (1024**3)
-        self.total_label.text = f"{total_gb_all:.2f} GB"
-
-        conn.commit()
-    
-    def _update_adapter_bg(self, instance, value):
-        instance.bg_rect.pos = instance.pos
-        instance.bg_rect.size = instance.size
+            # Remove cards for disconnected adapters
+            current_adapters = set(physical_adapters)
+            old_adapters = set(self.adapter_cards.keys())
+            
+            for old_adapter in old_adapters - current_adapters:
+                if old_adapter in self.adapter_cards:
+                    self.adapters_layout.remove_widget(self.adapter_cards[old_adapter])
+                    del self.adapter_cards[old_adapter]
+                    
+        except Exception as e:
+            print(f"Error updating data: {e}")
+            self.status_label.text = "🔴 Error updating"
 
 
 class NetUsageApp(App):
@@ -475,28 +828,32 @@ class NetUsageApp(App):
     minimized = BooleanProperty(False)
     
     def build(self):
-        self.title = "Network Data Dashboard"
+        self.title = "Network Monitor Dashboard"
         self.icon = os.path.join(BASE_DIR, 'icon.png') if os.path.exists(os.path.join(BASE_DIR, 'icon.png')) else None
         
         # Check if we should start minimized
         if '--minimized' in sys.argv:
             self.minimized = True
-            # Schedule the minimize operation
             Clock.schedule_once(self.minimize_to_tray, 0.1)
         
         return NetUsage()
 
     def on_stop(self):
         """Save settings when app closes"""
-        Config.set('netusage', 'refresh_interval', str(self.root.refresh_interval))
-        Config.write()
+        try:
+            if not Config.has_section('netusage'):
+                Config.add_section('netusage')
+            
+            Config.set('netusage', 'refresh_interval', str(self.root.refresh_interval))
+            Config.write()
+        except Exception as e:
+            print(f"Error saving config: {e}")
 
     def minimize_to_tray(self, dt):
         """Minimize the app to system tray"""
         if HAS_SYSTRAY and platform == 'win':
             Window.hide()
         else:
-            # Fallback for systems without system tray support
             self.stop()
 
 
@@ -505,8 +862,10 @@ if __name__ == "__main__":
     if '--minimized' in sys.argv:
         start_minimized = True
     
-    # Initialize the app
-    app = NetUsageApp()
-    
-    # Start the app
-    app.run()
+    # Initialize and run the app
+    try:
+        app = NetUsageApp()
+        app.run()
+    except Exception as e:
+        print(f"Error starting app: {e}")
+        input("Press Enter to exit...")
