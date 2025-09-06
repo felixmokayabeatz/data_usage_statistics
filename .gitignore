@@ -24,3 +24,4 @@ data_usage_statistics_v_env/
 NetUsageApp.spec
 dist/
 build/
+.iss/
