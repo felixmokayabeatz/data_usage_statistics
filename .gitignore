@@ -21,3 +21,6 @@ data_usage_statistics_v_env/
 *.json
 *.db
 *.sqlite
+NetUsageApp.spec
+dist/
+build/
