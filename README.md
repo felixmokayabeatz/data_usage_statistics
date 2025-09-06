@@ -1,2 +1,2 @@
-# data_usage_statistics
+# Data Usage Statistics App
 Data Usage Statistics
