@@ -1,6 +1,0 @@
-
-data_usage_statistics_v_env/
-venv/
-env/
-*.pyc
-__pycache__/
